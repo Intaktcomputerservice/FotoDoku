@@ -1,0 +1,15 @@
+{
+  "name": "fotodoku-watchfolder",
+  "version": "1.0.0",
+  "description": "Watchfolder prototype for reading image GPS data and renaming files by address",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "chokidar": "^4.0.3",
+    "dotenv": "^16.6.1",
+    "exiftool-vendored": "^30.0.0"
+  }
+}
