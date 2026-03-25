@@ -1,180 +1,90 @@
-# FotoDoku Watchfolder (Prototype)
+# FotoDoku Watchfolder
 
-Dieses Node.js-Tool überwacht einen Ordner, liest GPS-Daten aus Bildern und benennt die Dateien automatisch anhand der ermittelten Adresse um.
+## Überblick
+Dieser Dienst automatisiert einen einfachen Foto-Workflow:
 
-Ziel ist ein möglichst einfacher Ablauf: Bilder werden in einen Ordner gelegt und anschließend automatisch strukturiert abgelegt.
+1. Bilddatei in den Eingangsordner legen.
+2. GPS-Daten aus EXIF lesen.
+3. Koordinaten in eine Adresse auflösen.
+4. Datei umbenennen und in den Zielordner verschieben.
 
----
+Der Fokus liegt auf robuster, nachvollziehbarer Verarbeitung mit klaren Fehlerpfaden und Protokollierung.
 
-## Funktionsweise (Ablauf)
-
-1. Bilder werden in den Ordner `eingang/` gelegt  
-2. Das Programm erkennt neue Dateien automatisch  
-3. EXIF-Daten werden ausgelesen (inkl. GPS-Koordinaten)  
-4. Die Koordinaten werden per Reverse Geocoding in eine Adresse umgewandelt  
-5. Die Datei wird umbenannt und nach `verarbeitet/` verschoben  
-6. Bilder ohne GPS-Daten werden nach `ohne_gps/` verschoben  
-7. Fehlerhafte Dateien werden nach `fehler/` verschoben  
-8. Alle Vorgänge werden in einer CSV-Datei unter `logs/` protokolliert  
-
----
+## Ablauf der Verarbeitung
+1. **Dateierkennung**: Neue Bilder im Ordner `eingang/` werden erkannt.
+2. **Metadatenanalyse**: EXIF-Daten werden gelesen und auf GPS-Informationen geprüft.
+3. **Geocoding**: Koordinaten werden per Nominatim Reverse Geocoding in Adressdaten umgewandelt.
+4. **Benennung**: Dateiname folgt dem Schema `YYYY-MM-DD_ort_strasse_hausnummer.ext`.
+5. **Routing**:
+   - Erfolg → `verarbeitet/`
+   - Keine GPS-Daten → `ohne_gps/`
+   - Fehler → `fehler/`
+6. **Logging**: Ergebnisse werden in `logs/processing_YYYY-MM-DD.csv` protokolliert.
 
 ## Technische Eigenschaften
+- Sequenzielle Geocoding-Verarbeitung zur kontrollierten API-Nutzung.
+- Rate-Limit-Steuerung (`REQUEST_INTERVAL_MS`, mindestens 1000 ms).
+- Retry-Mechanismus bei temporären HTTP-/Netzwerkfehlern.
+- Persistenter Geocode-Cache (`logs/geocode-cache.json`).
+- Konfiguration über `.env`.
 
-- Verarbeitung erfolgt sequentiell (keine parallelen API-Aufrufe)  
-- Einhaltung des Rate Limits (max. 1 Anfrage pro Sekunde)  
-- Zwischenspeicherung von Geocoding-Ergebnissen (Cache)  
-- Wiederholungsversuche bei temporären Fehlern  
-- Konfiguration über `.env`-Datei  
+## Konfiguration
+### Beispiel `.env`
+```env
+# Ordner
+WATCH_DIR=./eingang
+OUTPUT_DIR=./verarbeitet
+NO_GPS_DIR=./ohne_gps
+ERROR_DIR=./fehler
+LOG_DIR=./logs
+CACHE_FILE=./logs/geocode-cache.json
 
----
+# Geocoding
+NOMINATIM_BASE_URL=https://nominatim.openstreetmap.org
+USER_AGENT=FotoDokuWatchfolder/1.0 (deine@email.de)
+ACCEPT_LANGUAGE=de
+REVERSE_ZOOM=18
+REQUEST_INTERVAL_MS=1100
+
+# Verarbeitung
+PROCESS_DELAY_MS=3000
+RETRY_COUNT=2
+RETRY_DELAY_MS=2500
+```
+
+### Hinweise zur Konfiguration
+- `USER_AGENT` muss eindeutig sein und eine Kontaktmöglichkeit enthalten.
+- Änderungen an `.env` werden erst nach Neustart des Dienstes wirksam.
+- Eine Internetverbindung ist für Geocoding erforderlich.
 
 ## Installation und Start
-
-### Voraussetzungen
-
-- Node.js muss installiert sein (Download unter https://nodejs.org; empfohlen wird die aktuelle LTS-Version)  
-- Internetverbindung für Geocoding  
-
----
-
 ### macOS / Linux
-
 ```bash
 npm install
 cp .env.example .env
 npm start
 ```
 
----
-
-### Windows (Eingabeaufforderung / CMD)
-
+### Windows (CMD)
 ```cmd
 npm install
 copy .env.example .env
 npm start
 ```
 
----
+## Ordner und Dateien
+- `eingang/`: Eingang für neue Bilddateien.
+- `verarbeitet/`: Erfolgreich umbenannte Dateien.
+- `ohne_gps/`: Dateien ohne GPS-Metadaten.
+- `fehler/`: Dateien mit Verarbeitungsausnahmen.
+- `logs/`: CSV-Protokolle und Cache-Datei.
 
-### Alternative (alle Systeme)
+## Bekannte Grenzen
+- Keine semantische POI-/Firmenzuordnung.
+- Keine grafische Benutzeroberfläche.
+- Für sehr große Datenmengen aktuell nur eingeschränkt optimiert.
 
-Die Datei `.env.example` kann auch manuell kopiert und in `.env` umbenannt werden.
-
----
-
-## Konfiguration (.env)
-
-Die `.env`-Datei enthält alle konfigurierbaren Einstellungen.
-
-### Beispiel `.env`
-
-```env
-# Ordnerstruktur
-WATCH_DIR=./eingang
-OUTPUT_DIR=./verarbeitet
-NO_GPS_DIR=./ohne_gps
-ERROR_DIR=./fehler
-LOG_DIR=./logs
-
-# Nominatim API
-NOMINATIM_BASE_URL=https://nominatim.openstreetmap.org
-
-# WICHTIG: Eindeutiger User-Agent
-USER_AGENT=FotoDokuWatchfolder/1.0 (deine@email.de)
-
-# Rate Limit (max. 1 Request / Sekunde)
-REQUEST_INTERVAL_MS=1100
-
-# Verarbeitung
-PROCESS_DELAY_MS=3000
-
-# Retry-Verhalten
-RETRY_COUNT=2
-RETRY_DELAY_MS=2500
-
-# Sprache
-ACCEPT_LANGUAGE=de
-```
-
----
-
-### Hinweise zur `.env`
-
-- Der `USER_AGENT` muss eindeutig sein  
-- Keine Platzhalter wie `example.com` verwenden  
-- Die E-Mail dient nur zur Identifikation gegenüber dem Geocoding-Dienst  
-- Änderungen an der `.env` werden erst nach einem Neustart (`npm start`) wirksam  
-
----
-
-## Ordnerstruktur
-
-- `eingang/`  
-  Eingangsordner für neue Bilder  
-
-- `verarbeitet/`  
-  Erfolgreich verarbeitete Bilder  
-
-- `ohne_gps/`  
-  Bilder ohne Standortdaten  
-
-- `fehler/`  
-  Dateien mit Verarbeitungsfehlern  
-
-- `logs/`  
-  Protokolle und Cache-Dateien  
-
----
-
-## Dateibenennung
-
-Beispiel:
-
-2026-03-16_berlin_musterstrasse_12.jpg
-
-Bei gleichen Namen wird automatisch ergänzt:
-
-2026-03-16_berlin_musterstrasse_12_01.jpg
-
----
-
-## Caching
-
-- Ergebnisse des Geocodings werden lokal gespeichert  
-- Identische Koordinaten führen nicht zu erneuten API-Anfragen  
-- Reduziert Last und vermeidet Sperrungen  
-
----
-
-## Hinweise zur Nutzung
-
-- Eine Internetverbindung ist erforderlich  
-- Der verwendete Geocoding-Dienst (Nominatim) ist für begrenzte Nutzung gedacht  
-- Die Anwendung ist als Prototyp ausgelegt  
-
----
-
-## Einschränkungen
-
-- Keine Zuordnung zu Firmen oder POIs  
-- Keine grafische Benutzeroberfläche  
-- Verarbeitung großer Datenmengen nur eingeschränkt geeignet  
-
----
-
-## Weiterentwicklung (optional)
-
-- Integration einer alternativen Geocoding-API  
-- Erweiterung um Firmen- oder Objektzuordnung  
-- Aufbau einer einfachen Benutzeroberfläche  
-- Optimierung für größere Datenmengen  
-
----
-
-## Ziel
-
-Automatisierung eines einfachen Workflows:
-
-Bild aufnehmen → in Ordner legen → Datei wird automatisch sinnvoll benannt und abgelegt
+## Begriffserklärung
+- **EXIF**: Metadatenformat in Bilddateien (z. B. Kamera, Datum, GPS).
+- **Reverse Geocoding**: Umwandlung von Koordinaten in menschenlesbare Adressen.
+- **Rate Limit**: Begrenzung der Anfragefrequenz an externe Dienste.
