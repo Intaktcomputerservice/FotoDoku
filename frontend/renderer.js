@@ -16,14 +16,58 @@ const el = {
   defaultFolder: document.getElementById('defaultFolderInput')
 };
 
+const actionButtons = [
+  'pickFilesBtn',
+  'pickTargetBtn',
+  'pickDefaultBtn',
+  'saveSettingsBtn',
+  'prepareBtn',
+  'processBtn'
+].map((id) => document.getElementById(id));
+
+const api = window.fotoDokuApi;
+
 init();
 
 async function init() {
   bindEvents();
-  const settings = await window.fotoDokuApi.loadSettings();
-  state.defaultTargetFolder = settings.defaultTargetFolder;
-  state.targetFolder = settings.defaultTargetFolder;
-  syncFolderInputs();
+
+  if (!hasBridgeApi()) {
+    handleBridgeUnavailable();
+    return;
+  }
+
+  try {
+    const settings = await api.loadSettings();
+    state.defaultTargetFolder = settings.defaultTargetFolder;
+    state.targetFolder = settings.defaultTargetFolder;
+    syncFolderInputs();
+  } catch (error) {
+    reportError('Einstellungen konnten nicht geladen werden.', error);
+  }
+}
+
+function hasBridgeApi() {
+  return api
+    && typeof api.pickFiles === 'function'
+    && typeof api.pickFolder === 'function'
+    && typeof api.loadSettings === 'function'
+    && typeof api.saveSettings === 'function'
+    && typeof api.prepareJob === 'function'
+    && typeof api.processJob === 'function';
+}
+
+function handleBridgeUnavailable() {
+  disableUiActions(true);
+  const message = 'Electron-Bridge nicht verfügbar. Bitte prüfen, ob das Preload-Skript korrekt geladen wurde.';
+  setProgress(message);
+  console.error(message);
+}
+
+function disableUiActions(disabled) {
+  actionButtons.forEach((button) => {
+    if (button) button.disabled = disabled;
+  });
 }
 
 function bindEvents() {
@@ -50,11 +94,13 @@ function bindEvents() {
 }
 
 async function onPickFiles() {
-  const filePaths = await window.fotoDokuApi.pickFiles();
+  const filePaths = await callApi('Dateiauswahl fehlgeschlagen.', () => api.pickFiles(), []);
   addFiles(filePaths);
 }
 
 function addFiles(filePaths) {
+  if (!Array.isArray(filePaths) || !filePaths.length) return;
+
   const merged = new Set([...state.filePaths, ...filePaths]);
   state.filePaths = [...merged];
   state.items = [];
@@ -69,11 +115,15 @@ async function onPrepare() {
   }
 
   setProgress('Analysiere Dateien und erstelle Vorschläge...');
-  state.items = await window.fotoDokuApi.prepareJob({
+  const items = await callApi('Vorschläge konnten nicht erzeugt werden.', () => api.prepareJob({
     filePaths: state.filePaths,
     company: el.company.value.trim(),
     extraText: el.extra.value.trim()
-  });
+  }));
+
+  if (!items) return;
+
+  state.items = items;
   renderFileList();
   setProgress('Vorschläge erstellt. Dateinamen können vor dem Verarbeiten angepasst werden.');
 }
@@ -90,7 +140,9 @@ async function onProcess() {
   }));
 
   setProgress('Verarbeitung läuft...');
-  const result = await window.fotoDokuApi.processJob({ items, targetFolder: state.targetFolder });
+  const result = await callApi('Verarbeitung ist fehlgeschlagen.', () => api.processJob({ items, targetFolder: state.targetFolder }));
+  if (!result) return;
+
   const ok = result.successes.length;
   const bad = result.rejected.length;
 
@@ -116,7 +168,7 @@ function onCancel() {
 }
 
 async function onPickTargetFolder() {
-  const folder = await window.fotoDokuApi.pickFolder();
+  const folder = await callApi('Zielordner konnte nicht gewählt werden.', () => api.pickFolder(), null);
   if (folder) {
     state.targetFolder = folder;
     syncFolderInputs();
@@ -124,7 +176,7 @@ async function onPickTargetFolder() {
 }
 
 async function onPickDefaultFolder() {
-  const folder = await window.fotoDokuApi.pickFolder();
+  const folder = await callApi('Standardordner konnte nicht gewählt werden.', () => api.pickFolder(), null);
   if (folder) {
     state.defaultTargetFolder = folder;
     el.defaultFolder.value = folder;
@@ -132,7 +184,11 @@ async function onPickDefaultFolder() {
 }
 
 async function onSaveSettings() {
-  const saved = await window.fotoDokuApi.saveSettings({ defaultTargetFolder: state.defaultTargetFolder });
+  const saved = await callApi('Einstellungen konnten nicht gespeichert werden.', () => api.saveSettings({
+    defaultTargetFolder: state.defaultTargetFolder
+  }));
+  if (!saved) return;
+
   state.defaultTargetFolder = saved.defaultTargetFolder;
   if (!state.targetFolder) state.targetFolder = saved.defaultTargetFolder;
   syncFolderInputs();
@@ -176,4 +232,23 @@ function renderFileList() {
 
 function basename(filePath) {
   return filePath.split(/[/\\]/).pop();
+}
+
+async function callApi(userMessage, fn, fallback = null) {
+  if (!hasBridgeApi()) {
+    handleBridgeUnavailable();
+    return fallback;
+  }
+
+  try {
+    return await fn();
+  } catch (error) {
+    reportError(userMessage, error);
+    return fallback;
+  }
+}
+
+function reportError(userMessage, error) {
+  setProgress(userMessage);
+  console.error(`${userMessage}`, error);
 }
