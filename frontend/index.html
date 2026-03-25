@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FotoDoku</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <h1>FotoDoku</h1>
+
+      <section class="card">
+        <h2>Dateien hinzufügen</h2>
+        <div id="dropZone" class="drop-zone">Bilder hier ablegen oder über den Button auswählen</div>
+        <button id="pickFilesBtn">Dateien auswählen</button>
+      </section>
+
+      <section class="card form-grid">
+        <label>Firma
+          <input id="companyInput" type="text" placeholder="z. B. Musterfirma" />
+        </label>
+        <label>Zusatztext (optional)
+          <input id="extraInput" type="text" placeholder="z. B. Eingang Nord" />
+        </label>
+      </section>
+
+      <section class="card">
+        <h2>Zielordner</h2>
+        <div class="row">
+          <input id="targetFolderInput" type="text" readonly />
+          <button id="pickTargetBtn">Für diesen Lauf ändern</button>
+        </div>
+        <details>
+          <summary>Einstellungen</summary>
+          <div class="row">
+            <input id="defaultFolderInput" type="text" readonly />
+            <button id="pickDefaultBtn">Standardordner wählen</button>
+            <button id="saveSettingsBtn">Speichern</button>
+          </div>
+        </details>
+      </section>
+
+      <section class="card">
+        <h2>Dateiliste</h2>
+        <div id="fileList"></div>
+      </section>
+
+      <section class="card row">
+        <button id="prepareBtn">Vorschläge erzeugen</button>
+        <button id="processBtn" class="primary">Verarbeiten</button>
+        <button id="cancelBtn" class="danger">Abbrechen</button>
+      </section>
+
+      <section class="card">
+        <h2>Status</h2>
+        <div id="progress">Bereit.</div>
+        <div id="summary"></div>
+      </section>
+    </main>
+    <script src="./renderer.js"></script>
+  </body>
+</html>

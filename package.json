@@ -1,15 +1,34 @@
 {
   "name": "fotodoku",
   "version": "1.0.0",
-  "description": "FotoDoku Watchfolder zur automatischen Bildbenennung per GPS und Adresse",
-  "main": "index.js",
+  "description": "FotoDoku als lokale Desktop-Anwendung für Bildverarbeitung mit EXIF/GPS",
+  "main": "electron/main.js",
   "type": "module",
   "scripts": {
-    "start": "node index.js"
+    "start": "electron .",
+    "start:node": "node index.js",
+    "build:win": "electron-builder --win"
   },
   "dependencies": {
     "chokidar": "^4.0.3",
     "dotenv": "^16.6.1",
+    "electron": "^36.0.0",
     "exiftool-vendored": "^30.0.0"
+  },
+  "devDependencies": {
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "de.fotodoku.desktop",
+    "productName": "FotoDoku",
+    "files": [
+      "electron/**/*",
+      "frontend/**/*",
+      "backend/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis"
+    }
   }
 }
