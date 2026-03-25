@@ -1,7 +1,7 @@
 {
-  "name": "fotodoku-watchfolder",
+  "name": "fotodoku",
   "version": "1.0.0",
-  "description": "Watchfolder prototype for reading image GPS data and renaming files by address",
+  "description": "FotoDoku Watchfolder zur automatischen Bildbenennung per GPS und Adresse",
   "main": "index.js",
   "type": "module",
   "scripts": {
