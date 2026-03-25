@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import path from 'path';
 import fs from 'fs';
 import { app, BrowserWindow, ipcMain, dialog } from 'electron';
@@ -16,9 +17,22 @@ const userData = app.getPath('userData');
 const store = createSettingsStore(path.join(userData, 'settings.json'));
 const fallbackTarget = path.join(app.getPath('documents'), 'FotoDoku', 'verarbeitet');
 
+/**
+ * 🔧 ENV Handling (robust)
+ */
+const userAgent =
+  process.env.USER_AGENT ||
+  'FotoDokuDesktop/1.0 (fallback@fotodoku.local)';
+
+const acceptLanguage = process.env.ACCEPT_LANGUAGE || 'de';
+
+/**
+ * 🔧 Geocode Service (FIXED: kein Hardcoded Dummy mehr)
+ */
 const geocodeService = createGeocodeService({
   cacheFile: path.join(userData, 'geocode-cache.json'),
-  userAgent: 'FotoDokuDesktop/1.0 (kontakt@example.org)'
+  userAgent,
+  acceptLanguage
 });
 
 function createWindow() {
@@ -49,6 +63,9 @@ app.on('window-all-closed', async () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
+/**
+ * 📂 File Dialogs
+ */
 ipcMain.handle('dialog:pick-files', async () => {
   const result = await dialog.showOpenDialog(win, {
     properties: ['openFile', 'multiSelections'],
@@ -58,10 +75,15 @@ ipcMain.handle('dialog:pick-files', async () => {
 });
 
 ipcMain.handle('dialog:pick-folder', async () => {
-  const result = await dialog.showOpenDialog(win, { properties: ['openDirectory', 'createDirectory'] });
+  const result = await dialog.showOpenDialog(win, {
+    properties: ['openDirectory', 'createDirectory']
+  });
   return result.canceled ? null : result.filePaths[0];
 });
 
+/**
+ * ⚙️ Settings
+ */
 ipcMain.handle('settings:load', async () => {
   const current = store.read();
   const defaultTargetFolder = current.defaultTargetFolder || fallbackTarget;
@@ -70,11 +92,16 @@ ipcMain.handle('settings:load', async () => {
 });
 
 ipcMain.handle('settings:save', async (_event, payload) => {
-  const next = { defaultTargetFolder: payload.defaultTargetFolder || fallbackTarget };
+  const next = {
+    defaultTargetFolder: payload.defaultTargetFolder || fallbackTarget
+  };
   store.write(next);
   return next;
 });
 
+/**
+ * 📦 Job Handling
+ */
 ipcMain.handle('job:prepare', async (_event, payload) => {
   return prepareBatch({
     filePaths: payload.filePaths,
@@ -85,7 +112,15 @@ ipcMain.handle('job:prepare', async (_event, payload) => {
 });
 
 ipcMain.handle('job:process', async (_event, payload) => {
-  const targetRoot = payload.targetFolder || store.read().defaultTargetFolder || fallbackTarget;
+  const targetRoot =
+    payload.targetFolder ||
+    store.read().defaultTargetFolder ||
+    fallbackTarget;
+
   fs.mkdirSync(targetRoot, { recursive: true });
-  return processBatch({ items: payload.items, targetRoot });
+
+  return processBatch({
+    items: payload.items,
+    targetRoot
+  });
 });
