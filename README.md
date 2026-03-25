@@ -58,6 +58,8 @@ npm run build:win
 
 ## Hinweise
 
+- Die Electron-Bridge wird über `electron/preload.cjs` geladen (CommonJS), damit sie trotz `"type": "module"` zuverlässig startet.
+- Falls Buttons nicht reagieren, zuerst in den DevTools prüfen, ob `window.fotoDokuApi` vorhanden ist.
 - Dateien ohne GPS werden nicht verschoben und bleiben unverändert am Ursprungsort.
 - Bei Namenskonflikten werden automatisch Suffixe (`_1`, `_2`, …) ergänzt.
 - Interne Caches liegen im Electron `userData`-Ordner und es werden keine temporären Bildduplikate erzeugt.
