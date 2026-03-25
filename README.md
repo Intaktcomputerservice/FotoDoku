@@ -1,62 +1,63 @@
-# FotoDoku
+# FotoDoku (Desktop)
 
-## 📌 Übersicht
-FotoDoku ist ein Node.js-Watchfolder-Dienst für die automatische Verarbeitung von Bildern mit GPS-Metadaten. Neue Dateien werden erkannt, anhand der EXIF-Position einer Adresse zugeordnet, sinnvoll umbenannt und in passende Zielordner verschoben.
+FotoDoku ist jetzt als lokale Electron-Desktop-App aufgebaut (Windows-first), mit Node.js-Backend und einer schlanken Oberfläche in HTML/CSS/JavaScript.
 
-## 🚀 Features
-- Überwacht einen Eingangsordner kontinuierlich mit `chokidar`.
-- Liest EXIF-Metadaten inklusive GPS-Koordinaten mit `exiftool-vendored`.
-- Führt Reverse Geocoding über Nominatim mit Rate-Limit und Retry-Logik aus.
-- Nutzt lokalen Geocode-Cache zur Reduktion externer API-Anfragen.
-- Verschiebt Dateien abhängig vom Ergebnis in `verarbeitet/`, `ohne_gps/` oder `fehler/`.
-- Protokolliert jeden Verarbeitungsschritt als CSV in `logs/`.
+## Funktionen
 
-## 🛠️ Technologien
-- Node.js (ES Modules)
-- `chokidar` (Dateisystem-Watching)
-- `dotenv` (Konfiguration über Umgebungsvariablen)
-- `exiftool-vendored` (EXIF-Auswertung)
-- Nominatim Reverse Geocoding (OpenStreetMap)
+- Drag-and-drop oder Dateiauswahl für `jpg`, `jpeg`, `png`, `heic`
+- EXIF-Auslesen und GPS-Erkennung pro Bild
+- Reverse-Geocoding über OpenStreetMap/Nominatim
+- Automatischer Dateinamensvorschlag im Schema:
+  - `YYYY-MM-DD_Firma_Straße_Hausnummer_BildX.ext`
+- Bearbeitbare Vorschläge vor dem Start
+- Zielordner-Management:
+  - Standardzielordner in Einstellungen
+  - Überschreibung pro aktuellem Lauf
+  - Fallback auf `Dokumente/FotoDoku/verarbeitet`
+- Verschieben statt Kopieren in Struktur `/YYYY/MM/`
+- Gemischte Batches: gültige Bilder werden verarbeitet, ungültige sauber abgelehnt
 
-## 📦 Installation
+## Projektstruktur
+
+- `electron/` – Electron Main-Prozess und Preload (sicherer IPC-Bridge)
+- `frontend/` – Renderer UI (reines HTML/CSS/JS, Sprache: Deutsch)
+- `backend/` – Wiederverwendbare Verarbeitungslogik (EXIF, Geocoding, Dateibenennung, Batch-Verarbeitung)
+- `index.js` – bisheriger Watchfolder-Einstieg (legacy, optional)
+
+## Entwicklung
+
 1. Abhängigkeiten installieren:
-   ```bash
-   npm install
-   ```
-2. Konfigurationsdatei anlegen:
-   ```bash
-   cp .env.example .env
-   ```
-   Unter Windows (CMD):
-   ```cmd
-   copy .env.example .env
-   ```
-3. `.env` prüfen und insbesondere `USER_AGENT` mit einer gültigen Kontakt-E-Mail setzen.
 
-## ▶️ Nutzung
-1. Dienst starten:
-   ```bash
-   npm start
-   ```
-2. Bilder in den Ordner `eingang/` legen.
-3. Ergebnisse in den Ausgabeordnern prüfen:
-   - `verarbeitet/` für erfolgreiche Verarbeitung
-   - `ohne_gps/` bei fehlenden GPS-Daten
-   - `fehler/` bei Verarbeitungsfehlern
-4. CSV-Protokolle unter `logs/` einsehen.
+```bash
+npm install
+```
 
-## 📂 Projektstruktur
-- `index.js`: Einstiegspunkt und vollständige Verarbeitungslogik.
-- `package.json`: Projekt-Metadaten, Skripte und Runtime-Abhängigkeiten.
-- `README.md`: Hauptdokumentation für Setup und Nutzung.
-- `README_FotoDoku_Watchfolder.md`: Vertiefende technische Dokumentation zum Watchfolder-Workflow.
-- `logs/`: Laufzeit-Logs und Geocode-Cache.
+2. App starten:
 
-## 🤝 Beitrag
-1. Branch erstellen.
-2. Änderungen mit Fokus auf Wartbarkeit und Dokumentation umsetzen.
-3. Relevante Tests oder Laufchecks ausführen.
-4. Pull Request mit klarer Beschreibung erstellen.
+```bash
+npm start
+```
 
-## 📄 Lizenz
-Derzeit ist keine explizite Lizenzdatei enthalten. Ergänze bei Bedarf eine passende Open-Source-Lizenz (z. B. MIT) im Projektroot.
+## Build für Windows (EXE/Installer vorbereiten)
+
+```bash
+npm run build:win
+```
+
+`electron-builder` erzeugt anschließend ein Windows-Artefakt (NSIS).
+
+## Kurzablauf in der App
+
+1. Bilder per Drag-and-drop oder Button hinzufügen.
+2. Firma und optional Zusatztext eintragen.
+3. Vorschläge erzeugen lassen.
+4. Vorgeschlagene Dateinamen bei Bedarf pro Datei anpassen.
+5. Zielordner prüfen/ändern.
+6. `Verarbeiten` klicken.
+7. Zusammenfassung über erfolgreiche und abgelehnte Bilder lesen.
+
+## Hinweise
+
+- Dateien ohne GPS werden nicht verschoben und bleiben unverändert am Ursprungsort.
+- Bei Namenskonflikten werden automatisch Suffixe (`_1`, `_2`, …) ergänzt.
+- Interne Caches liegen im Electron `userData`-Ordner und es werden keine temporären Bildduplikate erzeugt.
