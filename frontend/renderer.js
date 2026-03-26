@@ -2,7 +2,8 @@ const state = {
   filePaths: [],
   items: [],
   targetFolder: '',
-  defaultTargetFolder: ''
+  defaultTargetFolder: '',
+  lastResult: null
 };
 
 const el = {
@@ -22,7 +23,8 @@ const actionButtons = [
   'pickDefaultBtn',
   'saveSettingsBtn',
   'prepareBtn',
-  'processBtn'
+  'processBtn',
+  'cancelBtn'
 ].map((id) => document.getElementById(id));
 
 const api = window.fotoDokuApi;
@@ -91,6 +93,12 @@ function bindEvents() {
     const filePaths = Array.from(event.dataTransfer.files || []).map((file) => file.path).filter(Boolean);
     addFiles(filePaths);
   });
+
+  el.summary.addEventListener('click', (event) => {
+    if (event.target?.id === 'retryFailedBtn') {
+      void onRetryFailed();
+    }
+  });
 }
 
 async function onPickFiles() {
@@ -104,7 +112,9 @@ function addFiles(filePaths) {
   const merged = new Set([...state.filePaths, ...filePaths]);
   state.filePaths = [...merged];
   state.items = [];
+  state.lastResult = null;
   renderFileList();
+  el.summary.innerHTML = '';
   setProgress(`${state.filePaths.length} Datei(en) ausgewählt. Bitte Vorschläge erzeugen.`);
 }
 
@@ -114,7 +124,7 @@ async function onPrepare() {
     return;
   }
 
-  setProgress('Analysiere Dateien und erstelle Vorschläge...');
+  setProgress(`Analysiere ${state.filePaths.length} Datei(en) und erstelle Vorschläge...`);
   const items = await callApi('Vorschläge konnten nicht erzeugt werden.', () => api.prepareJob({
     filePaths: state.filePaths,
     company: el.company.value.trim(),
@@ -124,8 +134,10 @@ async function onPrepare() {
   if (!items) return;
 
   state.items = items;
+  state.lastResult = null;
   renderFileList();
-  setProgress('Vorschläge erstellt. Dateinamen können vor dem Verarbeiten angepasst werden.');
+  const rejected = items.filter((item) => item.status !== 'ready').length;
+  setProgress(`Vorschläge erstellt: ${items.length - rejected} bereit, ${rejected} abgelehnt.`);
 }
 
 async function onProcess() {
@@ -139,29 +151,34 @@ async function onProcess() {
     finalName: document.getElementById(`name-${index}`)?.value?.trim() || item.proposedName
   }));
 
-  setProgress('Verarbeitung läuft...');
+  setProgress(`Verarbeitung läuft (${items.length} Datei(en))...`);
   const result = await callApi('Verarbeitung ist fehlgeschlagen.', () => api.processJob({ items, targetFolder: state.targetFolder }));
   if (!result) return;
 
-  const ok = result.successes.length;
-  const bad = result.rejected.length;
+  state.lastResult = result;
+  renderSummary(result);
+  setProgress(`Verarbeitung abgeschlossen: ${result.successes.length} erfolgreich, ${result.rejected.length} fehlgeschlagen.`);
 
-  el.summary.innerHTML = `
-    <p><strong>Ergebnis:</strong> ${ok} erfolgreich, ${bad} abgelehnt.</p>
-    <ul>
-      ${result.rejected.map((entry) => `<li>${entry.originalName}: ${entry.reason}</li>`).join('')}
-    </ul>
-  `;
-  setProgress('Verarbeitung abgeschlossen.');
-
-  state.filePaths = [];
-  state.items = [];
+  const failedNames = new Set(result.rejected.map((entry) => entry.originalName));
+  state.items = state.items.filter((item) => failedNames.has(item.originalName));
+  state.filePaths = state.items.map((item) => item.sourcePath);
   renderFileList();
+}
+
+async function onRetryFailed() {
+  if (!state.items.length) {
+    setProgress('Keine fehlgeschlagenen Dateien für Retry vorhanden.');
+    return;
+  }
+
+  setProgress(`Retry gestartet (${state.items.length} Datei(en)).`);
+  await onProcess();
 }
 
 function onCancel() {
   state.filePaths = [];
   state.items = [];
+  state.lastResult = null;
   el.summary.innerHTML = '';
   renderFileList();
   setProgress('Aktueller Auftrag wurde verworfen.');
@@ -211,27 +228,51 @@ function renderFileList() {
   }
 
   if (!state.items.length) {
-    el.fileList.innerHTML = `<ul>${state.filePaths.map((file) => `<li>${basename(file)}</li>`).join('')}</ul>`;
+    el.fileList.innerHTML = `<ul>${state.filePaths.map((file) => `<li>${escapeHtml(basename(file))}</li>`).join('')}</ul>`;
     return;
   }
 
   el.fileList.innerHTML = state.items.map((item, index) => {
     if (item.status !== 'ready') {
-      return `<div class="file-row"><div>${item.originalName}</div><div>${item.reason}</div><span class="badge err">Abgelehnt</span></div>`;
+      return `<div class="file-row"><div>${escapeHtml(item.originalName)}</div><div>${escapeHtml(item.reason)}</div><span class="badge err">Abgelehnt</span></div>`;
     }
 
     return `
       <div class="file-row">
-        <div>${item.originalName}</div>
-        <input id="name-${index}" value="${item.proposedName}" />
+        <div>${escapeHtml(item.originalName)}</div>
+        <input id="name-${index}" value="${escapeHtmlAttr(item.proposedName)}" />
         <span class="badge ok">Bereit</span>
       </div>
     `;
   }).join('');
 }
 
+function renderSummary(result) {
+  const failedList = result.rejected.map((entry) => `<li>${escapeHtml(entry.originalName)}: ${escapeHtml(entry.reason)}</li>`).join('');
+  const retryButton = result.rejected.length ? '<button id="retryFailedBtn">Fehlgeschlagene erneut versuchen</button>' : '';
+
+  el.summary.innerHTML = `
+    <p><strong>Ergebnis:</strong> ${result.successes.length} erfolgreich, ${result.rejected.length} abgelehnt.</p>
+    ${retryButton}
+    <ul>${failedList}</ul>
+  `;
+}
+
 function basename(filePath) {
   return filePath.split(/[/\\]/).pop();
+}
+
+function escapeHtml(text) {
+  return String(text ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function escapeHtmlAttr(text) {
+  return escapeHtml(text).replace(/`/g, '&#96;');
 }
 
 async function callApi(userMessage, fn, fallback = null) {
