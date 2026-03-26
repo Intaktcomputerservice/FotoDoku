@@ -65,9 +65,7 @@ function validatePreparePayload(payload) {
   if (payload.filePaths.length > 5000) throw new Error('Zu viele Dateien in einem Lauf (max. 5000).');
 
   return {
-    filePaths: payload.filePaths.filter((entry) => typeof entry === 'string' && entry.trim()).map((entry) => path.resolve(entry)),
-    company: typeof payload.company === 'string' ? payload.company.slice(0, 120) : '',
-    extraText: typeof payload.extraText === 'string' ? payload.extraText.slice(0, 120) : ''
+    filePaths: payload.filePaths.filter((entry) => typeof entry === 'string' && entry.trim()).map((entry) => path.resolve(entry))
   };
 }
 

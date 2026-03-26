@@ -53,13 +53,11 @@ export function normalizeFilename(filename) {
   return `${base}${ext}`;
 }
 
-export function buildFilenameProposal({ date, firma, street, houseNumber, sequence, extension, extraText }) {
+export function buildFilenameProposal({ date, street, houseNumber, sequence, extension }) {
   const parts = [
     formatDateForName(date),
-    sanitizeFilenamePart(firma),
     sanitizeFilenamePart(street),
     sanitizeFilenamePart(houseNumber),
-    sanitizeFilenamePart(extraText),
     `Bild${Math.max(1, Number(sequence) || 1)}`
   ].filter(Boolean);
 
