@@ -7,12 +7,9 @@ const state = {
 };
 
 const el = {
-  dropZone: document.getElementById('dropZone'),
   fileList: document.getElementById('fileList'),
   progress: document.getElementById('progress'),
   summary: document.getElementById('summary'),
-  company: document.getElementById('companyInput'),
-  extra: document.getElementById('extraInput'),
   targetFolder: document.getElementById('targetFolderInput'),
   defaultFolder: document.getElementById('defaultFolderInput')
 };
@@ -81,19 +78,6 @@ function bindEvents() {
   document.getElementById('processBtn').addEventListener('click', onProcess);
   document.getElementById('cancelBtn').addEventListener('click', onCancel);
 
-  el.dropZone.addEventListener('dragover', (event) => {
-    event.preventDefault();
-    el.dropZone.classList.add('drag');
-  });
-
-  el.dropZone.addEventListener('dragleave', () => el.dropZone.classList.remove('drag'));
-  el.dropZone.addEventListener('drop', (event) => {
-    event.preventDefault();
-    el.dropZone.classList.remove('drag');
-    const filePaths = Array.from(event.dataTransfer.files || []).map((file) => file.path).filter(Boolean);
-    addFiles(filePaths);
-  });
-
   el.summary.addEventListener('click', (event) => {
     if (event.target?.id === 'retryFailedBtn') {
       void onRetryFailed();
@@ -126,9 +110,7 @@ async function onPrepare() {
 
   setProgress(`Analysiere ${state.filePaths.length} Datei(en) und erstelle Vorschläge...`);
   const items = await callApi('Vorschläge konnten nicht erzeugt werden.', () => api.prepareJob({
-    filePaths: state.filePaths,
-    company: el.company.value.trim(),
-    extraText: el.extra.value.trim()
+    filePaths: state.filePaths
   }));
 
   if (!items) return;

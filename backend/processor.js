@@ -24,7 +24,7 @@ function classifyError(error, fallbackMessage = 'Unbekannter Fehler') {
   return { category: 'technical', reason: error.message || fallbackMessage };
 }
 
-export async function prepareBatch({ filePaths, company, extraText, geocodeService, onProgress = () => {} }) {
+export async function prepareBatch({ filePaths, geocodeService, onProgress = () => {} }) {
   const proposals = [];
   let sequence = 1;
 
@@ -56,12 +56,10 @@ export async function prepareBatch({ filePaths, company, extraText, geocodeServi
       const imageDate = getImageDate(tags, filePath);
       const proposal = buildFilenameProposal({
         date: imageDate,
-        firma: company,
         street: pickStreet(address),
         houseNumber: address.house_number || '',
         sequence,
-        extension,
-        extraText
+        extension
       });
 
       proposals.push({
@@ -71,8 +69,6 @@ export async function prepareBatch({ filePaths, company, extraText, geocodeServi
         reason: '',
         proposedName: proposal,
         date: imageDate.toISOString(),
-        company,
-        extraText,
         metadata: {
           street: pickStreet(address),
           houseNumber: address.house_number || ''
