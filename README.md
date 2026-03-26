@@ -1,103 +1,98 @@
-# FotoDoku (Desktop)
+# FotoDoku
 
-FotoDoku ist eine lokale Electron-Desktop-App (Windows-first) zur robusten Bildverarbeitung mit EXIF-Auslese, GPS-Pflichtprüfung, Reverse-Geocoding und sicherer Dateiablage.
+FotoDoku is a local-first Electron desktop app for image processing. It reads image metadata, extracts EXIF/GPS coordinates, performs reverse geocoding through OpenStreetMap (Nominatim), and organizes files automatically with structured naming and folders.
 
-## Kernfunktionen
+## Features
 
-- Drag-and-drop oder Dateiauswahl für `jpg`, `jpeg`, `png`, `heic`
-- EXIF-Auslesen pro Bild mit robusten Datums-Fallbacks
-- GPS als Pflichtkriterium für die eigentliche Verarbeitung
-- Reverse-Geocoding über OpenStreetMap/Nominatim mit Queue, Rate-Limit, Retry und Timeout
-- Vorschlag und manuelle Anpassung von Dateinamen
-- Sichere Verschiebung in Struktur `/<Zielordner>/YYYY/MM/`
-- Geordnete Verarbeitungsergebnisse (erfolgreich/abgelehnt)
-- Retry für fehlgeschlagene Dateien direkt in der Oberfläche
+- **Automatic processing workflow** for selected images in one batch.
+- **EXIF/GPS extraction** with robust metadata fallbacks.
+- **Address resolution** from GPS coordinates via reverse geocoding.
+- **File renaming and sorting** into `YYYY/MM` target folders.
+- **Missing GPS handling** with clear rejection reasons (no silent failures).
+- **Local-first architecture**: files are processed on your machine.
+- **Collision-safe file moves** (`_1`, `_2`, ...) and cross-volume move fallback.
 
-## Verarbeitungsablauf
+## How It Works
 
-1. Bilder laden
-2. Für jede Datei:
-   - Dateityp validieren
-   - EXIF lesen
-   - GPS extrahieren (Pflicht)
-   - Datum bestimmen
-   - Adresse per Reverse-Geocoding (mit Cache)
-   - Dateinamen-Vorschlag erzeugen
-3. Beim Start der Verarbeitung:
-   - Zielordner validieren
-   - Ziel-Unterordner `YYYY/MM` anlegen
-   - Dateikollisionen per Suffix auflösen (`_1`, `_2`, ...)
-   - Sicheres Verschieben: zuerst `rename`, bei Cross-Volume-Fall (`EXDEV`) Fallback auf `copy + delete`
-4. Ergebnis inkl. Fehlergründen zurückgeben
+1. You add images to a batch (file picker, multiple files supported).
+2. FotoDoku reads EXIF metadata and validates supported image types.
+3. GPS coordinates are resolved to address parts (street/house number).
+4. The app generates a clean filename, then moves the file into a dated folder.
 
-## Anforderungen an Bilder (EXIF/GPS)
+## Installation
 
-- **GPS ist Pflicht** für volle Verarbeitung (Verschieben/Umbenennen).
-- Bilder ohne GPS werden **kontrolliert abgelehnt** und nicht verschoben.
-- Datums-Fallbacks für Dateinamen:
-  1. `DateTimeOriginal`
-  2. `CreateDate`
-  3. `ModifyDate`
-  4. Datum aus Dateiname (wenn Muster erkannt)
-  5. Dateisystemzeit
+### Requirements
 
-## Reverse-Geocoding-Strategie
+- **Node.js 20+**
+- **npm**
+- Windows is the primary target platform for packaged builds.
 
-- Dedizierte Queue pro Service-Instanz
-- Mindestabstand zwischen API-Aufrufen (`requestIntervalMs`)
-- Timeout-Schutz pro Request
-- Retry für temporäre Fehler (z. B. 429, 5xx, Timeout)
-- Cache nach Koordinaten-Schlüssel (auf 6 Nachkommastellen gerundet)
-- Deduplizierung laufender identischer Requests (in-flight)
-
-## Datenverlustschutz bei Dateioperationen
-
-- Keine stillschweigende Überschreibung (immer eindeutiger Zielname)
-- Quelle wird vor Verarbeitung geprüft
-- Zielordner-Erstellung mit Fehlerbehandlung
-- Bei `copy + delete` wird bei Teilausfall aufgeräumt (Zieldatei wird wieder entfernt)
-- Fehler werden pro Datei protokolliert und im Ergebnis sichtbar
-
-## Dateinamen-Regeln
-
-- Zentrale Sanitization für alle Segmente
-- Entfernung unzulässiger Zeichen und Mehrfachtrenner
-- Schutz vor leeren Segmenten und reservierten Windows-Namen
-- Konsistente Erweiterung (`.jpg`, `.png`, ...)
-- Begrenzte Namenslänge für bessere Dateisystem-Kompatibilität
-
-## Logging & Nachvollziehbarkeit
-
-Im Electron `userData`-Verzeichnis:
-
-- `logs/technical.log.jsonl` – technische Fehler/Events im JSONL-Format
-- `logs/processing_YYYY-MM-DD.csv` – fachlicher Verarbeitungsverlauf
-- `geocode-cache.json` – Reverse-Geocoding-Cache
-- `settings.json` (+ `.bak`) – Einstellungen mit Backup
-
-## Sicherheit / Validierung
-
-- `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`
-- Renderer erhält nur explizite API-Flächen über Preload-Bridge
-- IPC-Payloads werden validiert (Struktur, Typen, Limits)
-- Pfade werden normalisiert und in der Länge begrenzt
-- Eingaben für Dateinamen werden sanitisiert und gekürzt
-
-## Entwicklung
+### Run in development
 
 ```bash
 npm install
 npm start
 ```
 
-## Build für Windows
+## Build
+
+Create a Windows installer/build:
 
 ```bash
 npm run build:win
 ```
 
-## Hinweise / Grenzen
+Build artifacts are written to:
 
-- Bei dauerhaftem API-Ausfall (Geocoding) werden betroffene Bilder abgelehnt, aber der Batch läuft weiter.
-- Sehr große Batches sind möglich, aber API-seitig durch Rate-Limits begrenzt.
-- Legacy-Einstieg über `index.js` bleibt bestehen, Fokus dieser Robustheitsmaßnahmen ist die Desktop-App.
+- `dist/`
+
+## Project Structure
+
+- `electron/` → Electron main process, IPC handlers, app bootstrap.
+- `backend/` → Core processing logic (EXIF, geocoding, naming, processing, logs, settings).
+- `frontend/` → Renderer UI (`index.html`, `renderer.js`, `styles.css`).
+
+## Configuration
+
+### Settings storage
+
+FotoDoku stores runtime files in Electron's `userData` directory, including:
+
+- `settings.json` (with `settings.json.bak` backup)
+- `geocode-cache.json`
+- `logs/technical.log.jsonl`
+- `logs/processing_YYYY-MM-DD.csv`
+
+### Environment variables
+
+If needed, create a `.env` file in the project root.
+
+- `USER_AGENT` → Custom user agent for Nominatim requests.
+- `ACCEPT_LANGUAGE` → Preferred language for reverse geocoding responses.
+
+## Error Handling
+
+FotoDoku is designed to fail safely and continue batch processing where possible:
+
+- **Files without GPS**: rejected as business-rule failures and not moved.
+- **Corrupted/unreadable images**: rejected with EXIF read error details.
+- **Geocoding/API issues**: retried with delay; persistent failures are reported per file.
+- **Move failures**: logged and returned in results without stopping all other files.
+
+## Privacy
+
+- File processing is local.
+- Reverse geocoding requests send only coordinates to Nominatim.
+- No cloud upload pipeline is part of the application flow.
+
+## Roadmap
+
+- Improved UI/UX for large batches.
+- Optional folder-watch mode for continuous ingestion.
+- Better batch management and filtering in the results view.
+- Enhanced location enrichment (e.g., company/place details from OpenStreetMap).
+- AI-assisted filename or metadata enrichment options.
+
+## License
+
+No explicit license file is currently included in this repository.
