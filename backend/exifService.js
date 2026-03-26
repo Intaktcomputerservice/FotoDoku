@@ -1,16 +1,35 @@
 import fs from 'fs';
 import path from 'path';
-import { exiftool } from 'exiftool-vendored';
+import { ExifTool } from 'exiftool-vendored';
 
 const FILENAME_DATE_PATTERNS = [
   /(?<year>20\d{2}|19\d{2})[-_:.]?(?<month>0[1-9]|1[0-2])[-_:.]?(?<day>0[1-9]|[12]\d|3[01])(?:[-_ T]?(?<hour>[01]\d|2[0-3])[-_:.]?(?<minute>[0-5]\d)(?:[-_:.]?(?<second>[0-5]\d))?)?/,
   /IMG[-_ ]?(?<year>20\d{2})(?<month>0[1-9]|1[0-2])(?<day>0[1-9]|[12]\d|3[01])[-_ ]?(?<hour>[01]\d|2[0-3])(?<minute>[0-5]\d)(?<second>[0-5]\d)/i
 ];
 
+// Sauberer Singleton
+let exiftoolInstance = null;
+
+function getExiftool() {
+  if (!exiftoolInstance) {
+    exiftoolInstance = new ExifTool({
+      taskTimeoutMillis: 5000
+    });
+  }
+  return exiftoolInstance;
+}
+
+// Robustes Lesen mit Auto-Recovery
 export async function readExif(filePath) {
   try {
-    return await exiftool.read(filePath);
+    return await getExiftool().read(filePath);
   } catch (error) {
+    // Auto-Recovery bei beendetem Prozess
+    if (error?.message?.includes('BatchCluster has ended')) {
+      exiftoolInstance = null;
+      return await getExiftool().read(filePath);
+    }
+
     const wrapped = new Error(`EXIF konnte nicht gelesen werden: ${error.message}`);
     wrapped.code = 'EXIF_READ_FAILED';
     wrapped.cause = error;
@@ -37,15 +56,26 @@ function pickNumber(...values) {
 
 function parseExifDate(value) {
   if (!value) return null;
-  if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
+
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value;
+  }
 
   const asDate = new Date(value);
-  if (!Number.isNaN(asDate.getTime())) return asDate;
+  if (!Number.isNaN(asDate.getTime())) {
+    return asDate;
+  }
 
   if (typeof value === 'string') {
-    const normalized = value.trim().replace(/^(\d{4}):(\d{2}):(\d{2})/, '$1-$2-$3').replace(' ', 'T');
+    const normalized = value
+      .trim()
+      .replace(/^(\d{4}):(\d{2}):(\d{2})/, '$1-$2-$3')
+      .replace(' ', 'T');
+
     const parsed = new Date(normalized);
-    if (!Number.isNaN(parsed.getTime())) return parsed;
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed;
+    }
   }
 
   return null;
@@ -53,6 +83,7 @@ function parseExifDate(value) {
 
 function parseDateFromFilename(filePath) {
   const base = path.basename(filePath, path.extname(filePath));
+
   for (const pattern of FILENAME_DATE_PATTERNS) {
     const match = base.match(pattern);
     if (!match?.groups) continue;
@@ -67,6 +98,7 @@ function parseDateFromFilename(filePath) {
     const parsed = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
     if (!Number.isNaN(parsed.getTime())) return parsed;
   }
+
   return null;
 }
 
@@ -85,13 +117,21 @@ export function getImageDate(tags, filePath) {
   const fileNameDate = parseDateFromFilename(filePath);
   if (fileNameDate) return fileNameDate;
 
-  const stat = fs.statSync(filePath);
-  const fsDate = parseExifDate(stat.birthtime) || parseExifDate(stat.mtime);
-  if (fsDate) return fsDate;
+  try {
+    const stat = fs.statSync(filePath);
+    const fsDate = parseExifDate(stat.birthtime) || parseExifDate(stat.mtime);
+    if (fsDate) return fsDate;
+  } catch {
+    // bewusst still – fallback unten
+  }
 
   return new Date();
 }
 
+// Nur beim App-Exit aufrufen!
 export async function shutdownExiftool() {
-  await exiftool.end();
+  if (exiftoolInstance) {
+    await exiftoolInstance.end();
+    exiftoolInstance = null;
+  }
 }
