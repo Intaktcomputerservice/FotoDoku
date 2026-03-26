@@ -7,7 +7,10 @@
   "scripts": {
     "start": "electron .",
     "start:node": "node index.js",
-    "build:win": "electron-builder --win"
+    "build:win": "electron-builder --win",
+    "dev": "electron .",
+    "dist": "electron-builder",
+    "clean": "rimraf dist"
   },
   "dependencies": {
     "chokidar": "^4.0.3",
@@ -16,7 +19,8 @@
     "exiftool-vendored": "^30.0.0"
   },
   "devDependencies": {
-    "electron-builder": "^25.1.8"
+    "electron-builder": "^25.1.8",
+    "rimraf": "^5.0.10"
   },
   "build": {
     "appId": "de.fotodoku.desktop",
@@ -29,6 +33,10 @@
     ],
     "win": {
       "target": "nsis"
+    },
+    "asar": true,
+    "directories": {
+      "output": "dist"
     }
   }
 }
