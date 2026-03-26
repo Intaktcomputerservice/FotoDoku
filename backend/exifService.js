@@ -26,10 +26,12 @@ export async function readExif(filePath) {
   } catch (error) {
     // Auto-Recovery bei beendetem Prozess
     if (error?.message?.includes('BatchCluster has ended')) {
+      console.warn(`EXIF-Prozess beendet, starte neu: ${filePath}`);
       exiftoolInstance = null;
       return await getExiftool().read(filePath);
     }
 
+    console.error(`EXIF-Lesen fehlgeschlagen: ${filePath} — ${error.message}`);
     const wrapped = new Error(`EXIF konnte nicht gelesen werden: ${error.message}`);
     wrapped.code = 'EXIF_READ_FAILED';
     wrapped.cause = error;
@@ -121,8 +123,8 @@ export function getImageDate(tags, filePath) {
     const stat = fs.statSync(filePath);
     const fsDate = parseExifDate(stat.birthtime) || parseExifDate(stat.mtime);
     if (fsDate) return fsDate;
-  } catch {
-    // bewusst still – fallback unten
+  } catch (error) {
+    console.warn(`Datei-Zeitstempel konnte nicht gelesen werden: ${filePath} — ${error.message}`);
   }
 
   return new Date();
@@ -131,7 +133,12 @@ export function getImageDate(tags, filePath) {
 // Nur beim App-Exit aufrufen!
 export async function shutdownExiftool() {
   if (exiftoolInstance) {
-    await exiftoolInstance.end();
-    exiftoolInstance = null;
+    try {
+      await exiftoolInstance.end();
+    } catch (error) {
+      console.error(`ExifTool konnte nicht sauber beendet werden — ${error.message}`);
+    } finally {
+      exiftoolInstance = null;
+    }
   }
 }

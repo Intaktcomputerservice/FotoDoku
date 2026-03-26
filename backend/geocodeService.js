@@ -56,6 +56,7 @@ export function createGeocodeService({
           saveCache(cacheFile, cache);
           job.resolve(result);
         } catch (error) {
+          console.error(`Reverse-Geocoding fehlgeschlagen: ${job.latitude},${job.longitude} — ${error.message}`);
           job.reject(error);
         }
       }
@@ -75,6 +76,7 @@ export function createGeocodeService({
         if (!shouldRetry) break;
 
         const waitMs = retryBaseDelayMs * (attempt + 1);
+        console.warn(`Reverse-Geocoding Retry ${attempt + 1}/${maxRetries}: ${job.latitude},${job.longitude} in ${waitMs}ms — ${error.message}`);
         await delay(waitMs);
       }
     }
@@ -161,14 +163,24 @@ function loadCache(filePath) {
     if (!fs.existsSync(filePath)) return {};
     const raw = fs.readFileSync(filePath, 'utf8');
     return raw.trim() ? JSON.parse(raw) : {};
-  } catch {
+  } catch (error) {
+    console.warn(`Geocode-Cache konnte nicht geladen werden: ${filePath} — ${error.message}`);
     return {};
   }
 }
 
 function saveCache(filePath, cache) {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
   const tmp = `${filePath}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(cache, null, 2), 'utf8');
-  fs.renameSync(tmp, filePath);
+  try {
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(tmp, JSON.stringify(cache, null, 2), 'utf8');
+    fs.renameSync(tmp, filePath);
+  } catch (error) {
+    console.error(`Geocode-Cache konnte nicht gespeichert werden: ${filePath} — ${error.message}`);
+    try {
+      if (fs.existsSync(tmp)) fs.rmSync(tmp, { force: true });
+    } catch (cleanupError) {
+      console.warn(`Temporäre Cache-Datei konnte nicht entfernt werden: ${tmp} — ${cleanupError.message}`);
+    }
+  }
 }
