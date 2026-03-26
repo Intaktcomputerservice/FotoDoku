@@ -30,6 +30,12 @@ const config = {
 const allowedExtensions = new Set(['.jpg', '.jpeg', '.png', '.heic', '.heif', '.webp']);
 const pendingTimers = new Map();
 const processingFiles = new Set();
+const processedSignatures = new Map();
+const fileQueue = [];
+const MAX_RECENT_PROCESSED = 5000;
+const FILE_STABILITY_CHECKS = 3;
+const FILE_STABILITY_INTERVAL_MS = 400;
+let fileQueueRunning = false;
 
 const geocodeQueue = [];
 let queueRunning = false;
@@ -51,7 +57,7 @@ async function main() {
   ensureDirectory(path.dirname(config.cacheFile));
 
   const watcher = chokidar.watch(config.watchDir, {
-    ignoreInitial: false,
+    ignoreInitial: true,
     awaitWriteFinish: {
       stabilityThreshold: config.processDelayMs,
       pollInterval: 300
@@ -66,6 +72,21 @@ async function main() {
       return;
     }
     scheduleProcessing(filePath);
+  });
+
+  watcher.on('change', (filePath) => {
+    if (!isSupportedImage(filePath)) return;
+    scheduleProcessing(filePath);
+  });
+
+  watcher.on('unlink', (filePath) => {
+    const existing = pendingTimers.get(filePath);
+    if (existing) {
+      clearTimeout(existing);
+      pendingTimers.delete(filePath);
+    }
+    processingFiles.delete(filePath);
+    processedSignatures.delete(filePath);
   });
 
   watcher.on('error', (error) => {
@@ -103,28 +124,81 @@ function scheduleProcessing(filePath) {
 
   const timer = setTimeout(async () => {
     pendingTimers.delete(filePath);
-    if (processingFiles.has(filePath)) return;
-    processingFiles.add(filePath);
-
-    try {
-      await processFile(filePath);
-    } catch (error) {
-      console.error(`Fehler bei ${path.basename(filePath)}:`, error.message);
-      await moveToError(filePath, error.message);
-    } finally {
-      processingFiles.delete(filePath);
-    }
+    enqueueFile(filePath);
   }, config.processDelayMs);
 
   pendingTimers.set(filePath, timer);
 }
 
+function enqueueFile(filePath) {
+  if (processingFiles.has(filePath) || fileQueue.includes(filePath)) return;
+  fileQueue.push(filePath);
+  void runFileQueue();
+}
+
+async function runFileQueue() {
+  if (fileQueueRunning) return;
+  fileQueueRunning = true;
+
+  try {
+    while (fileQueue.length > 0) {
+      const filePath = fileQueue.shift();
+      if (!filePath || processingFiles.has(filePath)) continue;
+      processingFiles.add(filePath);
+
+      try {
+        await processSingleFile(filePath);
+      } finally {
+        processingFiles.delete(filePath);
+      }
+    }
+  } finally {
+    fileQueueRunning = false;
+  }
+}
+
+async function processSingleFile(filePath) {
+  const originalName = path.basename(filePath);
+
+  try {
+    if (!fs.existsSync(filePath)) return;
+
+    const stable = await waitForStableFile(filePath);
+    if (!stable) {
+      const error = new Error('Datei ist nicht stabil (vermutlich unvollständig geschrieben)');
+      error.code = 'FILE_NOT_STABLE';
+      throw error;
+    }
+
+    const signature = getFileSignature(filePath);
+    const knownSignature = processedSignatures.get(filePath);
+    if (signature && knownSignature === signature) {
+      console.log(`Übersprungen (bereits verarbeitet): ${originalName}`);
+      return;
+    }
+
+    await processFile(filePath);
+    if (signature) rememberProcessedSignature(filePath, signature);
+  } catch (error) {
+    console.error(`Fehler bei ${originalName}:`, error.message);
+    await moveToError(filePath, error.message);
+  }
+}
+
 async function processFile(filePath) {
+  const originalName = path.basename(filePath);
   if (!fs.existsSync(filePath)) return;
 
-  const tags = await exiftool.read(filePath);
+  let tags;
+  try {
+    tags = await exiftool.read(filePath);
+  } catch (error) {
+    const wrapped = new Error(`EXIF konnte nicht gelesen werden: ${error.message}`);
+    wrapped.code = 'EXIF_READ_FAILED';
+    throw wrapped;
+  }
+
   const coords = extractCoordinates(tags);
-  const originalName = path.basename(filePath);
 
   if (!coords) {
     const destination = await moveUnique(filePath, config.noGpsDir, originalName);
@@ -146,10 +220,8 @@ async function processFile(filePath) {
   const safeAddress = buildAddressSlug(address);
   const ext = path.extname(originalName).toLowerCase() || '.jpg';
   const baseName = `${timestamp}_${safeAddress}`;
-  const finalName = await makeUniqueFilename(config.outputDir, baseName, ext);
-  const destination = path.join(config.outputDir, finalName);
-
-  fs.renameSync(filePath, destination);
+  const destination = await moveUnique(filePath, config.outputDir, `${baseName}${ext}`);
+  const finalName = path.basename(destination);
 
   await appendLog({
     status: 'OK',
@@ -365,19 +437,40 @@ async function makeUniqueFilename(dir, baseName, ext) {
 }
 
 async function moveUnique(sourcePath, targetDir, originalName) {
+  ensureDirectory(targetDir);
   const ext = path.extname(originalName);
   const name = path.basename(originalName, ext);
-  let candidate = `${name}${ext}`;
+  let candidate = `${name}${ext || '.jpg'}`;
   let counter = 1;
 
-  while (fs.existsSync(path.join(targetDir, candidate))) {
-    candidate = `${name}_${String(counter).padStart(2, '0')}${ext}`;
-    counter += 1;
-  }
+  while (true) {
+    const destination = path.join(targetDir, candidate);
 
-  const destination = path.join(targetDir, candidate);
-  fs.renameSync(sourcePath, destination);
-  return destination;
+    try {
+      moveFileSafely(sourcePath, destination);
+      return destination;
+    } catch (error) {
+      if (error?.code === 'EEXIST') {
+        candidate = `${name}_${String(counter).padStart(2, '0')}${ext || '.jpg'}`;
+        counter += 1;
+        continue;
+      }
+      throw error;
+    }
+  }
+}
+
+function moveFileSafely(sourcePath, destination) {
+  try {
+    fs.renameSync(sourcePath, destination);
+  } catch (error) {
+    if (error?.code === 'EXDEV') {
+      fs.copyFileSync(sourcePath, destination, fs.constants.COPYFILE_EXCL);
+      fs.unlinkSync(sourcePath);
+      return;
+    }
+    throw error;
+  }
 }
 
 async function moveToError(filePath, message) {
@@ -457,6 +550,46 @@ function saveCache(filePath, cache) {
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForStableFile(filePath) {
+  let previousSignature = null;
+  let stableCount = 0;
+
+  for (let attempt = 0; attempt < FILE_STABILITY_CHECKS + 5; attempt += 1) {
+    if (!fs.existsSync(filePath)) return false;
+    const signature = getFileSignature(filePath);
+    if (!signature) return false;
+
+    if (signature === previousSignature) {
+      stableCount += 1;
+      if (stableCount >= FILE_STABILITY_CHECKS) return true;
+    } else {
+      stableCount = 0;
+    }
+
+    previousSignature = signature;
+    await delay(FILE_STABILITY_INTERVAL_MS);
+  }
+
+  return false;
+}
+
+function getFileSignature(filePath) {
+  try {
+    const stats = fs.statSync(filePath);
+    return `${stats.size}:${stats.mtimeMs}`;
+  } catch {
+    return null;
+  }
+}
+
+function rememberProcessedSignature(filePath, signature) {
+  processedSignatures.set(filePath, signature);
+  if (processedSignatures.size <= MAX_RECENT_PROCESSED) return;
+
+  const oldestKey = processedSignatures.keys().next().value;
+  if (oldestKey) processedSignatures.delete(oldestKey);
 }
 
 function resolveEnvPath(value) {
