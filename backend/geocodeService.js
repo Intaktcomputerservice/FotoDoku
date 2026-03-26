@@ -26,7 +26,7 @@ export function createGeocodeService({
     if (inFlight.has(key)) return inFlight.get(key);
 
     const taskPromise = new Promise((resolve, reject) => {
-      queue.push({ key, latitude, longitude, resolve, reject, attempts: 0 });
+      queue.push({ key, latitude, longitude, resolve, reject });
       void processQueue();
     });
 

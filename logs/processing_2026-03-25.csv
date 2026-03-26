@@ -1,4 +1,0 @@
-timestamp,status,originalName,newName,latitude,longitude,address,note
-2026-03-25T08:01:16.845Z,OK,"PXL_20260227_203140069.jpg","2026-02-27_duisburg_peterstal_28.jpg",51.434078,6.757714,"Peterstal 28, 47051 Duisburg, Nordrhein-Westfalen, Deutschland",""
-2026-03-25T08:05:38.685Z,NO_GPS,"IMG_20260325_085333.jpg","IMG_20260325_085333.jpg",,,"","Keine GPS-Daten gefunden"
-2026-03-25T08:07:12.670Z,OK,"IMG_20260325_085333.jpg","2026-03-25_duisburg_schemkesweg_49.jpg",51.425674,6.789158,"Schemkesweg 49, 47057 Duisburg, Nordrhein-Westfalen, Deutschland",""
