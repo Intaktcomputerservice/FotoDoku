@@ -7,10 +7,10 @@
   "scripts": {
     "start": "electron .",
     "start:node": "node index.js",
-    "build:win": "electron-builder --win",
+    "build:win": "npm run clean && electron-builder --win nsis",
     "dev": "electron .",
-    "dist": "electron-builder",
-    "clean": "rimraf dist"
+    "dist": "npm run clean && electron-builder",
+    "clean": "node -e \"require('fs').rmSync('dist',{ recursive: true, force: true })\""
   },
   "dependencies": {
     "chokidar": "^4.0.3",
@@ -27,9 +27,16 @@
     "productName": "FotoDoku",
     "files": [
       "electron/**/*",
-      "frontend/**/*",
       "backend/**/*",
-      "package.json"
+      "frontend/**/*",
+      "package.json",
+      "!**/*.log",
+      "!**/logs/**",
+      "!**/tmp/**",
+      "!**/temp/**",
+      "!**/__tests__/**",
+      "!**/*.test.*",
+      "!**/*.spec.*"
     ],
     "win": {
       "target": "nsis"
