@@ -18,7 +18,16 @@ function csvEscape(value) {
   return text;
 }
 
-export function createLogService({ technicalLogFile, processingCsvFile }) {
+function getCurrentLogFiles(logsRootDir) {
+  const day = new Date().toISOString().slice(0, 10);
+  const dailyDir = path.join(logsRootDir, day);
+  return {
+    technicalLogFile: path.join(dailyDir, 'app.log'),
+    processingCsvFile: path.join(dailyDir, 'processing.csv')
+  };
+}
+
+export function createLogService({ logsRootDir }) {
   function logTechnical(level, message, context = {}) {
     const entry = {
       timestamp: new Date().toISOString(),
@@ -26,6 +35,8 @@ export function createLogService({ technicalLogFile, processingCsvFile }) {
       message,
       context
     };
+
+    const { technicalLogFile } = getCurrentLogFiles(logsRootDir);
 
     try {
       ensureDir(technicalLogFile);
@@ -36,6 +47,8 @@ export function createLogService({ technicalLogFile, processingCsvFile }) {
   }
 
   function appendProcessingRow(row) {
+    const { processingCsvFile } = getCurrentLogFiles(logsRootDir);
+
     try {
       ensureDir(processingCsvFile);
       if (!fs.existsSync(processingCsvFile)) {

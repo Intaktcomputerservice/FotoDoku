@@ -60,8 +60,30 @@ FotoDoku stores runtime files in Electron's `userData` directory, including:
 
 - `settings.json` (with `settings.json.bak` backup)
 - `geocode-cache.json`
-- `logs/technical.log.jsonl`
-- `logs/processing_YYYY-MM-DD.csv`
+- `logs/` (daily log folders, see below)
+
+
+### Logging
+
+Logs are **not** stored in the project directory. FotoDoku writes logs to Electron's OS-specific `userData` directory and creates folders automatically.
+
+Folder structure:
+
+```
+logs/<YYYY-MM-DD>/
+  - app.log
+  - processing.csv
+```
+
+Purpose:
+
+- `app.log` → technical/debug log (structured JSON lines, machine-readable).
+- `processing.csv` → audit trail of processed images (human-readable CSV).
+
+Typical base paths:
+
+- macOS: `~/Library/Application Support/FotoDoku/`
+- Windows: `%APPDATA%/FotoDoku/`
 
 ### Environment variables
 
