@@ -46,6 +46,7 @@ export async function prepareBatch({ filePaths, geocodeService, onProgress = () 
       const tags = await readExif(filePath);
       const coords = extractCoordinates(tags);
       if (!coords) {
+        console.warn(`Bild ohne GPS-Daten erkannt: ${filePath}`);
         const gpsError = new Error('Bild enthält keine gültigen GPS-Koordinaten');
         gpsError.code = 'NO_GPS_DATA';
         throw gpsError;
@@ -76,6 +77,7 @@ export async function prepareBatch({ filePaths, geocodeService, onProgress = () 
       });
       sequence += 1;
     } catch (error) {
+      console.error(`Bild konnte nicht vorbereitet werden: ${filePath} — ${error.message}`);
       const classified = classifyError(error, 'Fehler bei der Analyse');
       proposals.push({ sourcePath: filePath, originalName: baseName, status: 'rejected', reason: classified.reason, category: classified.category });
     }
@@ -98,8 +100,8 @@ async function safeMoveFile(sourcePath, destinationPath) {
     } catch (unlinkError) {
       try {
         fs.rmSync(destinationPath, { force: true });
-      } catch {
-        // noop: secondary cleanup failure should not hide original issue
+      } catch (cleanupError) {
+        console.warn(`Rollback nach Move-Fehler fehlgeschlagen: ${destinationPath} — ${cleanupError.message}`);
       }
       const wrapped = new Error(`Kopie erstellt, Quelle konnte aber nicht gelöscht werden: ${unlinkError.message}`);
       wrapped.code = 'MOVE_DELETE_SOURCE_FAILED';

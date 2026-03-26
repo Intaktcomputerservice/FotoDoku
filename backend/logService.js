@@ -2,7 +2,12 @@ import fs from 'fs';
 import path from 'path';
 
 function ensureDir(filePath) {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  try {
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  } catch (error) {
+    console.error(`Log-Verzeichnis konnte nicht erstellt werden: ${filePath} — ${error.message}`);
+    throw error;
+  }
 }
 
 function csvEscape(value) {
@@ -22,25 +27,33 @@ export function createLogService({ technicalLogFile, processingCsvFile }) {
       context
     };
 
-    ensureDir(technicalLogFile);
-    fs.appendFileSync(technicalLogFile, `${JSON.stringify(entry)}\n`, 'utf8');
+    try {
+      ensureDir(technicalLogFile);
+      fs.appendFileSync(technicalLogFile, `${JSON.stringify(entry)}\n`, 'utf8');
+    } catch (error) {
+      console.error(`Technisches Log konnte nicht geschrieben werden: ${technicalLogFile} — ${error.message}`);
+    }
   }
 
   function appendProcessingRow(row) {
-    ensureDir(processingCsvFile);
-    if (!fs.existsSync(processingCsvFile)) {
-      fs.writeFileSync(processingCsvFile, 'timestamp;event;file;result;detail\n', 'utf8');
+    try {
+      ensureDir(processingCsvFile);
+      if (!fs.existsSync(processingCsvFile)) {
+        fs.writeFileSync(processingCsvFile, 'timestamp;event;file;result;detail\n', 'utf8');
+      }
+
+      const line = [
+        new Date().toISOString(),
+        row.event,
+        row.file,
+        row.result,
+        row.detail || ''
+      ].map(csvEscape).join(';');
+
+      fs.appendFileSync(processingCsvFile, `${line}\n`, 'utf8');
+    } catch (error) {
+      console.error(`Processing-Log konnte nicht geschrieben werden: ${processingCsvFile} — ${error.message}`);
     }
-
-    const line = [
-      new Date().toISOString(),
-      row.event,
-      row.file,
-      row.result,
-      row.detail || ''
-    ].map(csvEscape).join(';');
-
-    fs.appendFileSync(processingCsvFile, `${line}\n`, 'utf8');
   }
 
   return { logTechnical, appendProcessingRow };
