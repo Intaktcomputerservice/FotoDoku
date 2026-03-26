@@ -13,23 +13,13 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 let win;
-
-const userData = app.getPath('userData');
-const store = createSettingsStore(path.join(userData, 'settings.json'));
-const fallbackTarget = path.join(app.getPath('documents'), 'FotoDoku', 'verarbeitet');
-const logService = createLogService({
-  technicalLogFile: path.join(userData, 'logs', 'technical.log.jsonl'),
-  processingCsvFile: path.join(userData, 'logs', `processing_${new Date().toISOString().slice(0, 10)}.csv`)
-});
+let store;
+let geocodeService;
+let logService;
+let fallbackTarget;
 
 const userAgent = process.env.USER_AGENT || 'FotoDokuDesktop/1.0 (fallback@fotodoku.local)';
 const acceptLanguage = process.env.ACCEPT_LANGUAGE || 'de';
-
-const geocodeService = createGeocodeService({
-  cacheFile: path.join(userData, 'geocode-cache.json'),
-  userAgent,
-  acceptLanguage
-});
 
 function createWindow() {
   win = new BrowserWindow({
@@ -119,6 +109,19 @@ function validateProcessPayload(payload) {
 }
 
 app.whenReady().then(() => {
+  const userData = app.getPath('userData');
+  store = createSettingsStore(path.join(userData, 'settings.json'));
+  fallbackTarget = path.join(app.getPath('documents'), 'FotoDoku', 'verarbeitet');
+  logService = createLogService({
+    logsRootDir: path.join(userData, 'logs')
+  });
+
+  geocodeService = createGeocodeService({
+    cacheFile: path.join(userData, 'geocode-cache.json'),
+    userAgent,
+    acceptLanguage
+  });
+
   createWindow();
 
   app.on('activate', () => {
