@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import path from 'path';
 import fs from 'fs';
-import { app, BrowserWindow, ipcMain, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
 import { fileURLToPath } from 'url';
 import { createGeocodeService } from '../backend/geocodeService.js';
 import { createSettingsStore } from '../backend/settingsStore.js';
@@ -44,6 +44,31 @@ function createWindow() {
   });
 
   win.loadFile(path.join(__dirname, '../frontend/index.html'));
+
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (isSafeExternalUrl(url)) {
+      void shell.openExternal(url);
+    }
+    return { action: 'deny' };
+  });
+
+  win.webContents.on('will-navigate', (event, url) => {
+    if (url !== win.webContents.getURL()) {
+      event.preventDefault();
+      if (isSafeExternalUrl(url)) {
+        void shell.openExternal(url);
+      }
+    }
+  });
+}
+
+function isSafeExternalUrl(url) {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+  } catch {
+    return false;
+  }
 }
 
 function sanitizeFolderInput(folderPath) {
@@ -66,6 +91,30 @@ function validatePreparePayload(payload) {
 
   return {
     filePaths: payload.filePaths.filter((entry) => typeof entry === 'string' && entry.trim()).map((entry) => path.resolve(entry))
+  };
+}
+
+function validateProcessPayload(payload) {
+  if (!payload || typeof payload !== 'object') throw new Error('Ungültige Anfrage: payload fehlt.');
+  if (!Array.isArray(payload.items)) throw new Error('Ungültige Anfrage: items muss ein Array sein.');
+  if (payload.items.length > 5000) throw new Error('Zu viele Dateien in einem Lauf (max. 5000).');
+
+  const items = payload.items
+    .filter((item) => item && typeof item === 'object' && typeof item.sourcePath === 'string' && item.sourcePath.trim())
+    .map((item) => ({
+      ...item,
+      sourcePath: path.resolve(item.sourcePath),
+      originalName: typeof item.originalName === 'string' ? item.originalName : '',
+      status: item.status === 'ready' ? 'ready' : 'rejected',
+      finalName: typeof item.finalName === 'string' ? item.finalName : '',
+      proposedName: typeof item.proposedName === 'string' ? item.proposedName : '',
+      reason: typeof item.reason === 'string' ? item.reason : '',
+      category: typeof item.category === 'string' ? item.category : ''
+    }));
+
+  return {
+    items,
+    targetFolder: typeof payload.targetFolder === 'string' ? payload.targetFolder : ''
   };
 }
 
@@ -137,14 +186,15 @@ ipcMain.handle('job:prepare', async (_event, payload) => {
 
 ipcMain.handle('job:process', async (_event, payload) => {
   try {
+    const normalizedPayload = validateProcessPayload(payload);
     const targetRoot = sanitizeFolderInput(
-      payload?.targetFolder || store.read().defaultTargetFolder || fallbackTarget
+      normalizedPayload.targetFolder || store.read().defaultTargetFolder || fallbackTarget
     );
 
     fs.mkdirSync(targetRoot, { recursive: true });
 
     return await processBatch({
-      items: Array.isArray(payload?.items) ? payload.items : [],
+      items: normalizedPayload.items,
       targetRoot,
       onLog: (entry) => {
         const detail = entry.error || entry.reason || entry.strategy || '';
